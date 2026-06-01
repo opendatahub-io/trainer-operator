@@ -1,0 +1,24 @@
+pull_request_rules:
+  - name: Auto-approve lake-gate PRs
+    conditions:
+      - base=main
+      - label=lake-gate
+      - -draft
+      - -closed
+      - author=github-actions[bot]
+      - check-success~=^Red Hat Konflux / odh-trainer-operator-its-manual.*
+      - check-success~=^Red Hat Konflux / odh-trainer-operator-on-pull-request.*
+    actions:
+      review:
+        type: APPROVE
+  - name: Auto-merge lake-gate PRs to main
+    conditions:
+      - base=main
+      - label=lake-gate
+      - -draft
+      - -closed
+      - author=github-actions[bot]
+      - "#approved-reviews-by>=1"
+    actions:
+      merge:
+        method: fast-forward
