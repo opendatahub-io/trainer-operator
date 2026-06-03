@@ -30,7 +30,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -134,7 +133,7 @@ func (r *TrainerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Selector: labelSelector,
 	}
 
-	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
+	return ctrl.NewControllerManagedBy(mgr).
 		For(&componentsv1alpha1.Trainer{}, builder.WithPredicates(predicates.GenerationChangedPredicate{})).
 		Named("trainer").
 		// Watch downstream namespaced resources for drift correction
@@ -152,40 +151,14 @@ func (r *TrainerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(cluster.EnqueueOwner()),
 			builder.WithPredicates(managedResourcePredicate),
-		)
-
-	// Watch ClusterTrainingRuntime (cluster-scoped, external CRD)
-	// Fail fast if CRD doesn't exist - it must be installed before operator starts
-	ctx := context.Background()
-	ctrGVK := schema.GroupKind{
-		Group: trainerKubeflowGroup,
-		Kind:  clusterTrainingRuntime,
-	}
-	if err := cluster.CustomResourceDefinitionExists(ctx, mgr.GetAPIReader(), ctrGVK); err != nil {
-		return fmt.Errorf("ClusterTrainingRuntime CRD must be installed before starting the operator: %w", err)
-	}
-
-	// CRD exists, add the watch
-	clusterTrainingRuntimeObj := &unstructured.Unstructured{}
-	clusterTrainingRuntimeObj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   trainerKubeflowGroup,
-		Version: trainerKubeflowVersion,
-		Kind:    clusterTrainingRuntime,
-	})
-	controllerBuilder = controllerBuilder.Watches(
-		clusterTrainingRuntimeObj,
-		handler.EnqueueRequestsFromMapFunc(cluster.EnqueueOwner()),
-		builder.WithPredicates(managedResourcePredicate),
-	)
-
-	// Watch ValidatingWebhookConfiguration (cluster-scoped)
-	controllerBuilder = controllerBuilder.Watches(
-		&admissionv1.ValidatingWebhookConfiguration{},
-		handler.EnqueueRequestsFromMapFunc(cluster.EnqueueOwner()),
-		builder.WithPredicates(managedResourcePredicate),
-	)
-
-	return controllerBuilder.Complete(r)
+		).
+		// Watch ValidatingWebhookConfiguration (cluster-scoped)
+		Watches(
+			&admissionv1.ValidatingWebhookConfiguration{},
+			handler.EnqueueRequestsFromMapFunc(cluster.EnqueueOwner()),
+			builder.WithPredicates(managedResourcePredicate),
+		).
+		Complete(r)
 }
 
 func (r *TrainerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
