@@ -1,0 +1,10 @@
+name: Modular Operator Processor
+on:
+  workflow_dispatch:
+
+jobs:
+  process-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POC
+        run: echo "POC workflow for modular operator processor. Full implementation available on branch rhoai-99.99"
