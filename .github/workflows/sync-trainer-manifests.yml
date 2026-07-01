@@ -40,7 +40,8 @@ jobs:
         run: |
           branch="chore/sync-trainer-manifests"
 
-          if git diff --quiet manifests/trainer/; then
+          git add manifests/trainer/
+          if git diff --cached --quiet manifests/trainer/; then
             echo "No changes detected, skipping PR."
             exit 0
           fi
