@@ -28,6 +28,7 @@ jobs:
           REF: ${{ github.event.inputs.ref || 'main' }}
         run: |
           rm -rf manifests/trainer/*
+          mkdir -p manifests/trainer
           git clone --depth 1 --branch "${REF}" https://github.com/opendatahub-io/trainer.git /tmp/trainer
           cp -rf /tmp/trainer/manifests/* manifests/trainer/
           rm -rf /tmp/trainer
