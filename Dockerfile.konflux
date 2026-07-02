@@ -1,0 +1,41 @@
+# Build the manager binary
+FROM registry.access.redhat.com/ubi9/go-toolset@sha256:b2bc0c6c92c56dce575ed1b2dec1ec9f8b345a80ef5e74d9bfd530b6b354feeb as builder
+
+WORKDIR /workspace
+
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
+
+# Copy the go source
+COPY . .
+
+# Build
+USER root
+RUN CGO_ENABLED=1 GOEXPERIMENT=strictfipsruntime GOOS=linux go build -a -o manager cmd/main.go
+
+# Runtime
+FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:463cae32c6f6f5594b11a5c22de275016bd8545ce58a6373388e8b24f13fc15c
+
+WORKDIR /
+COPY --from=builder /workspace/manager .
+COPY manifests/trainer/ /opt/manifests-template/
+COPY manifests/runtimes/ /opt/runtimes-template/
+COPY manifests/imagestreams/ /opt/imagestreams-template/
+USER 65532:65532
+
+ENTRYPOINT ["/manager"]
+
+LABEL com.redhat.component="odh-trainer-operator-rhel9" \
+      name="rhoai/odh-trainer-operator-rhel9" \
+      description="odh-trainer-operator" \
+      summary="odh-trainer-operator" \
+      maintainer="['managed-open-data-hub@redhat.com']" \
+      io.openshift.expose-services="" \
+      io.k8s.display-name="odh-trainer-operator" \
+      io.k8s.description="odh-trainer-operator" \
+      com.redhat.license_terms="https://www.redhat.com/licenses/Red_Hat_Standard_EULA_20191108.pdf"
