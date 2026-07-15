@@ -1,6 +1,6 @@
 # trainer-operator
 
-Standalone operator for Kubeflow Trainer v2. Reconciles the `Trainer` CR (`components.platform.opendatahub.io/v1alpha1`) and deploys upstream Kubeflow Trainer resources via kustomize rendering from [opendatahub-io/trainer](https://github.com/opendatahub-io/trainer) manifests.
+Standalone module controller for Kubeflow Trainer v2. Reconciles the `Trainer` CR (`components.platform.opendatahub.io/v1alpha1`) and deploys upstream Kubeflow Trainer resources via kustomize rendering from [opendatahub-io/trainer](https://github.com/opendatahub-io/trainer) manifests.
 
 ## Architecture
 
