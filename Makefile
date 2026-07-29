@@ -235,7 +235,7 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	@tmp="$$(mktemp -d)"; [ -n "$$tmp" ] || { echo "mktemp failed"; exit 1; }; trap 'rm -rf "$$tmp"' EXIT; \
 		cp -r config "$$tmp/config"; \
 		cd "$$tmp" && sed -i 's|TRAINER_OPERATOR_IMAGE=.*|TRAINER_OPERATOR_IMAGE=$(IMG)|' config/default/params.env && \
-		grep -qF 'TRAINER_OPERATOR_IMAGE=$(IMG)' config/default/params.env || { echo "ERROR: failed to set TRAINER_OPERATOR_IMAGE"; exit 1; } && \
+		grep -qF 'TRAINER_OPERATOR_IMAGE=$(IMG)qqq' config/default/params.env || { echo "ERROR: failed to set TRAINER_OPERATOR_IMAGE"; exit 1; } && \
 		$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
