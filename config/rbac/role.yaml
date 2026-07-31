@@ -256,6 +256,7 @@ rules:
   resources:
   - clusterroles
   verbs:
+  - bind
   - delete
   - get
   - patch

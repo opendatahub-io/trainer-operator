@@ -135,18 +135,12 @@ type trainerActions struct {
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups="",resources=services;configmaps,verbs=get;list;watch;create;update;patch;delete
-// ServiceAccount mutate verbs are limited to accounts rendered from manifests/trainer.
-// create/list/watch stay unscoped (create ignores resourceNames; GC uses list).
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;update;patch;delete,resourceNames=kubeflow-trainer-controller-manager;kubeflow-trainer-cache-initializer
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=create;get;list;update
-// Mutate verbs on cluster RBAC objects are limited to names this operator manages.
-// create/list/watch stay unscoped: resourceNames is not enforced on create, and GC
-// discovers owned objects via label-based list. Keep resourceNames aligned with
-// manifests/trainer/ when those object names change.
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=create;list;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;update;patch;delete,resourceNames=kubeflow-trainer-controller-manager;training-admin;training-edit;training-view;kubeflow-trainer-admin;kubeflow-trainer-edit;kubeflow-trainer-view;kubeflow-trainer-cache-initializer
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;update;patch;delete;bind,resourceNames=kubeflow-trainer-controller-manager;training-admin;training-edit;training-view;kubeflow-trainer-admin;kubeflow-trainer-edit;kubeflow-trainer-view;kubeflow-trainer-cache-initializer
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;update;patch;delete,resourceNames=kubeflow-trainer-controller-manager;kubeflow-trainer-view
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;update;patch;delete,resourceNames=kubeflow-trainer-public
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;update;patch;delete,resourceNames=kubeflow-trainer-cache-initializer;kubeflow-trainer-public
