@@ -26,7 +26,10 @@ import (
 	"strings"
 )
 
-const imageParamControllerImage = "odh-kubeflow-trainer-controller-image"
+const (
+	imageParamControllerImage = "odh-kubeflow-trainer-controller-image"
+	paramOperatorNamespace    = "operator-namespace"
+)
 
 var trainerImageParamMap = map[string]string{
 	imageParamControllerImage: "RELATED_IMAGE_ODH_TRAINER_IMAGE",
@@ -42,6 +45,31 @@ var runtimesParamMap = map[string]string{
 	"odh-th-torch-cuda-py312-image": "RELATED_IMAGE_ODH_TH_TORCH_CUDA_PY312_IMAGE",
 	"odh-th-torch-rocm-py312-image": "RELATED_IMAGE_ODH_TH_TORCH_ROCM_PY312_IMAGE",
 	"odh-th-torch-cpu-py312-image":  "RELATED_IMAGE_ODH_TH_TORCH_CPU_PY312_IMAGE",
+}
+
+// applyStaticParams sets params.env keys directly to the given values,
+// without looking up environment variables. Used to inject runtime values
+// (e.g. operator-namespace) that are derived from the CR rather than images.
+func applyStaticParams(dir string, values map[string]string) error {
+	paramsPath := filepath.Join(dir, "params.env")
+
+	if _, err := os.Stat(paramsPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	params, err := readParams(paramsPath)
+	if err != nil {
+		return fmt.Errorf("reading params.env: %w", err)
+	}
+
+	for key, val := range values {
+		params[key] = val
+	}
+
+	return writeParams(paramsPath, params)
 }
 
 func applyParamOverrides(dir string, paramMap map[string]string) error {
