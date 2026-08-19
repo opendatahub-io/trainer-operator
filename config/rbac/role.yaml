@@ -4,6 +4,10 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
@@ -111,6 +115,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
   - components.platform.opendatahub.io
   resources:
   - trainers
@@ -178,6 +194,7 @@ rules:
   - monitoring.coreos.com
   resources:
   - podmonitors
+  - servicemonitors
   verbs:
   - create
   - delete
@@ -224,6 +241,8 @@ rules:
   resourceNames:
   - kubeflow-trainer-controller-manager
   - kubeflow-trainer-view
+  - trainer-metrics-auth
+  - trainer-metrics-reader
   resources:
   - clusterrolebindings
   verbs:
@@ -250,6 +269,8 @@ rules:
   - kubeflow-trainer-controller-manager
   - kubeflow-trainer-edit
   - kubeflow-trainer-view
+  - trainer-metrics-auth
+  - trainer-metrics-reader
   - training-admin
   - training-edit
   - training-view
@@ -264,7 +285,6 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - kubeflow-trainer-cache-initializer
-  - kubeflow-trainer-public
   resources:
   - rolebindings
   verbs:
