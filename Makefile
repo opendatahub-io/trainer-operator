@@ -238,11 +238,11 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 		cp -r config "$$tmp/config"; \
 		cd "$$tmp" && sed -i 's|TRAINER_OPERATOR_IMAGE=.*|TRAINER_OPERATOR_IMAGE=$(IMG)|' config/default/params.env && \
 		grep -qF 'TRAINER_OPERATOR_IMAGE=$(IMG)' config/default/params.env || { echo "ERROR: failed to set TRAINER_OPERATOR_IMAGE"; exit 1; } && \
-		$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+		$(KUSTOMIZE) build config/overlays/dev-certs | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/overlays/dev-certs | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 

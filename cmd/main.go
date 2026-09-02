@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"flag"
 	"os"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	trainerv1alpha1 "github.com/kubeflow/trainer/v2/pkg/apis/trainer/v1alpha1"
@@ -46,6 +48,7 @@ import (
 
 	componentsv1alpha1 "github.com/opendatahub-io/trainer-operator/api/v1alpha1"
 	"github.com/opendatahub-io/trainer-operator/internal/controller"
+	operatortls "github.com/opendatahub-io/trainer-operator/pkg/tls"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -67,10 +70,18 @@ func init() {
 
 func main() {
 	var metricsAddr string
+	var metricsCertPath, metricsCertName, metricsCertKey string
 	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
-		"Use :8080 for HTTP or leave as 0 to disable the metrics service.")
+	var secureMetrics bool
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
+		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&secureMetrics, "metrics-secure", true,
+		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
+		"The directory that contains the metrics server certificate.")
+	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
+	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -78,6 +89,29 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	restCfg := ctrl.GetConfigOrDie()
+	profileResult := operatortls.FetchTLSProfile(restCfg, scheme)
+	tlsOpts := profileResult.TLSOpts
+	tlsOpts = append(tlsOpts, func(c *tls.Config) {
+		c.NextProtos = []string{"h2", "http/1.1"}
+	})
+
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:   metricsAddr,
+		SecureServing: secureMetrics,
+		TLSOpts:       tlsOpts,
+	}
+	if secureMetrics {
+		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+	}
+	if len(metricsCertPath) > 0 {
+		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
+			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
+		metricsServerOptions.CertDir = metricsCertPath
+		metricsServerOptions.CertName = metricsCertName
+		metricsServerOptions.KeyName = metricsCertKey
+	}
 
 	// Scope the cache to the applications namespace to avoid watching
 	// resources cluster-wide. Injected by the ODH platform operator.
@@ -88,12 +122,9 @@ func main() {
 		setupLog.Info("scoping cache to applications namespace", "namespace", appNS)
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress:   metricsAddr,
-			SecureServing: false,
-		},
+	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
+		Scheme:                 scheme,
+		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,
 		// Cache hardening: label selectors ensure only trainer-managed
 		// resources are cached. ConfigMaps are excluded from the label
@@ -184,6 +215,8 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	ctx = operatortls.SetupProfileWatcherRestart(ctx, mgr, profileResult)
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {

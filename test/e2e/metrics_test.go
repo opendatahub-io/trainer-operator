@@ -23,14 +23,29 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const metricsServiceName = "trainer-operator-controller-manager-metrics-service"
+const (
+	metricsServiceName      = "trainer-operator-controller-manager-metrics-service"
+	metricsReaderRoleName   = "trainer-operator-metrics-reader"
+	metricsBindingName      = "trainer-operator-metrics-binding"
+	metricsServerSecretName = "trainer-operator-metrics-server-cert"
+	metricsPort             = 8443
+)
 
 func TestMetricsEndpoint(t *testing.T) {
 	g := NewWithT(t)
 	k8sClient.RegisterDebugCleanup(t, ctx, namespace, "curl-metrics")
+
+	ensureMetricsReaderBinding(g)
+
+	g.Eventually(func(g Gomega) {
+		_, err := k8sClient.CoreV1().Secrets(namespace).Get(ctx, metricsServerSecretName, metav1.GetOptions{})
+		g.Expect(err).NotTo(HaveOccurred(), "metrics-server-cert secret should exist")
+	}).Should(Succeed())
 
 	_, err := k8sClient.CoreV1().Services(namespace).Get(ctx, metricsServiceName, metav1.GetOptions{})
 	g.Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
@@ -44,7 +59,7 @@ func TestMetricsEndpoint(t *testing.T) {
 				continue
 			}
 			for _, port := range subset.Ports {
-				if port.Port == 8080 {
+				if port.Port == metricsPort {
 					found = true
 				}
 			}
@@ -78,8 +93,11 @@ func TestMetricsEndpoint(t *testing.T) {
 					Command: []string{"/bin/sh", "-c"},
 					Args: []string{
 						fmt.Sprintf(
-							"curl -v http://%s.%s.svc.cluster.local:8080/metrics",
-							metricsServiceName, namespace,
+							`TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && \
+curl -v --cacert /tmp/metrics-certs/ca.crt \
+-H "Authorization: Bearer ${TOKEN}" \
+https://%s.%s.svc.cluster.local:%d/metrics`,
+							metricsServiceName, namespace, metricsPort,
 						),
 					},
 					SecurityContext: &corev1.SecurityContext{
@@ -91,6 +109,23 @@ func TestMetricsEndpoint(t *testing.T) {
 						RunAsUser:    &runAsUser,
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "metrics-certs",
+							MountPath: "/tmp/metrics-certs",
+							ReadOnly:  true,
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "metrics-certs",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: metricsServerSecretName,
 						},
 					},
 				},
@@ -119,6 +154,30 @@ func TestMetricsEndpoint(t *testing.T) {
 	g.Expect(metricsOutput).To(ContainSubstring(
 		"controller_runtime_reconcile_total",
 	))
+}
+
+func ensureMetricsReaderBinding(g Gomega) {
+	binding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: metricsBindingName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     metricsReaderRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      rbacv1.ServiceAccountKind,
+				Name:      "default",
+				Namespace: namespace,
+			},
+		},
+	}
+	_, err := k8sClient.RbacV1().ClusterRoleBindings().Create(ctx, binding, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		g.Expect(err).NotTo(HaveOccurred(), "Failed to create metrics reader binding")
+	}
 }
 
 func getMetricsOutput(t *testing.T) string {

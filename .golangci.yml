@@ -51,6 +51,10 @@ linters:
           - dupl
           - lll
         path: internal/*
+      - linters:
+          - goconst
+          - lll
+        path: pkg/tls/
     paths:
       - third_party$
       - builtin$

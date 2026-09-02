@@ -3,5 +3,9 @@ resources:
 - role.yaml
 - role_binding.yaml
 - metrics_reader_role.yaml
+- metrics_auth_role.yaml
+- metrics_auth_role_binding.yaml
+- tls_clusterrole.yaml
+- tls_clusterrolebinding.yaml
 - trainer_admin_role.yaml
 - trainer_viewer_role.yaml
