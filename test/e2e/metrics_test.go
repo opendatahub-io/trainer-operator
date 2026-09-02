@@ -94,10 +94,11 @@ func TestMetricsEndpoint(t *testing.T) {
 					Args: []string{
 						fmt.Sprintf(
 							`TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && \
-curl -s -S --cacert /tmp/metrics-certs/ca.crt \
--H "Authorization: Bearer ${TOKEN}" \
+for i in $(seq 1 10); do \
+curl -s -k -H "Authorization: Bearer ${TOKEN}" \
 -w "\nHTTP_STATUS:%%{http_code}\n" \
-https://%s.%s.svc.cluster.local:%d/metrics`,
+https://%s.%s.svc.cluster.local:%d/metrics \
+&& exit 0 || sleep 5; done; exit 1`,
 							metricsServiceName, namespace, metricsPort,
 						),
 					},
@@ -110,23 +111,6 @@ https://%s.%s.svc.cluster.local:%d/metrics`,
 						RunAsUser:    &runAsUser,
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "metrics-certs",
-							MountPath: "/tmp/metrics-certs",
-							ReadOnly:  true,
-						},
-					},
-				},
-			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "metrics-certs",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: metricsServerSecretName,
 						},
 					},
 				},
