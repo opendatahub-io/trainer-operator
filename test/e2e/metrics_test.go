@@ -94,8 +94,9 @@ func TestMetricsEndpoint(t *testing.T) {
 					Args: []string{
 						fmt.Sprintf(
 							`TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && \
-for i in $(seq 1 10); do \
-curl -s -k -H "Authorization: Bearer ${TOKEN}" \
+for i in $(seq 1 30); do \
+curl -s -k --connect-timeout 5 --max-time 10 \
+-H "Authorization: Bearer ${TOKEN}" \
 -w "\nHTTP_STATUS:%%{http_code}\n" \
 https://%s.%s.svc.cluster.local:%d/metrics \
 && exit 0 || sleep 5; done; exit 1`,

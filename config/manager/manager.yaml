@@ -31,6 +31,7 @@ spec:
         args:
           - --health-probe-bind-address=:8081
           - --zap-log-level=info
+          - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
         image: REPLACED_BY_KUSTOMIZE
         name: manager
         ports:
@@ -67,11 +68,18 @@ spec:
           mountPath: /opt/manifests-work
         - name: tmp
           mountPath: /tmp
+        - name: metrics-certs
+          mountPath: /tmp/k8s-metrics-server/metrics-certs
+          readOnly: true
       volumes:
       - name: manifests-work
         emptyDir:
           sizeLimit: 256Mi
       - name: tmp
         emptyDir: {}
+      - name: metrics-certs
+        secret:
+          secretName: metrics-server-cert
+          optional: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

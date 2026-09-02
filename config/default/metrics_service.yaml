@@ -5,6 +5,8 @@ metadata:
     control-plane: controller-manager
     app.kubernetes.io/name: trainer-operator
     app.kubernetes.io/managed-by: kustomize
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: metrics-server-cert
   name: controller-manager-metrics-service
   namespace: system
 spec:

@@ -1,5 +1,5 @@
 # Dev/e2e overlay: cert-manager metrics certs and Prometheus ServiceMonitor.
-# Production RHOAI deploy uses config/default only (no cert-manager).
+# Production RHOAI deploy uses config/default only (service-ca provides certs).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -9,11 +9,7 @@ resources:
 - ../../default
 - ../../certmanager
 - ../../prometheus
-
-patches:
-- path: cert_metrics_manager_patch.yaml
-  target:
-    kind: Deployment
+- ../../network-policy
 
 replacements:
   - source:

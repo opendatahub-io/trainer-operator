@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"flag"
 	"os"
@@ -42,6 +41,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	configv1 "github.com/openshift/api/config/v1"
+	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
+
 	trainerv1alpha1 "github.com/kubeflow/trainer/v2/pkg/apis/trainer/v1alpha1"
 	platformcache "github.com/opendatahub-io/odh-platform-utilities/pkg/cache"
 	platformlabels "github.com/opendatahub-io/odh-platform-utilities/pkg/metadata/labels"
@@ -62,6 +64,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.Install(scheme))
 
 	utilruntime.Must(componentsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(trainerv1alpha1.AddToScheme(scheme))
@@ -92,10 +95,7 @@ func main() {
 
 	restCfg := ctrl.GetConfigOrDie()
 	profileResult := operatortls.FetchTLSProfile(restCfg, scheme)
-	tlsOpts := profileResult.TLSOpts
-	tlsOpts = append(tlsOpts, func(c *tls.Config) {
-		c.NextProtos = []string{"h2", "http/1.1"}
-	})
+	tlsOpts := append(profileResult.TLSOpts, openshifttls.SetNextProtos(openshifttls.HTTP2NextProtos...))
 
 	metricsServerOptions := metricsserver.Options{
 		BindAddress:   metricsAddr,
