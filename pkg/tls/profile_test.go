@@ -336,6 +336,29 @@ func TestFetchTLSProfileWithClient(t *testing.T) {
 		}
 	})
 
+	t.Run("APIServer with no tlsSecurityProfile returns Intermediate", func(t *testing.T) {
+		apiServer := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "config.openshift.io/v1",
+			"kind":       "APIServer",
+			"metadata":   map[string]interface{}{"name": "cluster"},
+			"spec":       map[string]interface{}{},
+		}}
+		c := fake.NewClientBuilder().WithObjects(apiServer).Build()
+		result := FetchTLSProfileWithClient(context.Background(), c)
+		if !result.Fetched {
+			t.Error("expected Fetched=true")
+		}
+		cfg := &cryptotls.Config{}
+		for _, opt := range result.TLSOpts {
+			opt(cfg)
+		}
+		if cfg.MinVersion != cryptotls.VersionTLS12 {
+			t.Errorf("expected TLS 1.2, got %d", cfg.MinVersion)
+		}
+	})
+}
+
+func TestFetchTLSProfileWithClient_ErrorPaths(t *testing.T) {
 	t.Run("transient error returns Intermediate with Fetched=false but APIAvailable=true", func(t *testing.T) {
 		c := fake.NewClientBuilder().
 			WithInterceptorFuncs(interceptor.Funcs{
@@ -417,27 +440,6 @@ func TestFetchTLSProfileWithClient(t *testing.T) {
 		}
 		if len(cfg.CipherSuites) != len(IntermediateCiphers) {
 			t.Errorf("expected %d Intermediate ciphers, got %d", len(IntermediateCiphers), len(cfg.CipherSuites))
-		}
-	})
-
-	t.Run("APIServer with no tlsSecurityProfile returns Intermediate", func(t *testing.T) {
-		apiServer := &unstructured.Unstructured{Object: map[string]interface{}{
-			"apiVersion": "config.openshift.io/v1",
-			"kind":       "APIServer",
-			"metadata":   map[string]interface{}{"name": "cluster"},
-			"spec":       map[string]interface{}{},
-		}}
-		c := fake.NewClientBuilder().WithObjects(apiServer).Build()
-		result := FetchTLSProfileWithClient(context.Background(), c)
-		if !result.Fetched {
-			t.Error("expected Fetched=true")
-		}
-		cfg := &cryptotls.Config{}
-		for _, opt := range result.TLSOpts {
-			opt(cfg)
-		}
-		if cfg.MinVersion != cryptotls.VersionTLS12 {
-			t.Errorf("expected TLS 1.2, got %d", cfg.MinVersion)
 		}
 	})
 }
