@@ -94,9 +94,9 @@ func TestMetricsEndpoint(t *testing.T) {
 					Args: []string{
 						fmt.Sprintf(
 							`TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && \
-curl --fail --silent --show-error --cacert /tmp/metrics-certs/ca.crt \
+curl -s -S --cacert /tmp/metrics-certs/ca.crt \
 -H "Authorization: Bearer ${TOKEN}" \
--o /dev/stdout -w "\nHTTP_STATUS:%%{http_code}\n" \
+-w "\nHTTP_STATUS:%%{http_code}\n" \
 https://%s.%s.svc.cluster.local:%d/metrics`,
 							metricsServiceName, namespace, metricsPort,
 						),
