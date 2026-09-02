@@ -94,8 +94,9 @@ func TestMetricsEndpoint(t *testing.T) {
 					Args: []string{
 						fmt.Sprintf(
 							`TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && \
-curl -v --cacert /tmp/metrics-certs/ca.crt \
+curl --fail --silent --show-error --cacert /tmp/metrics-certs/ca.crt \
 -H "Authorization: Bearer ${TOKEN}" \
+-o /dev/stdout -w "\nHTTP_STATUS:%%{http_code}\n" \
 https://%s.%s.svc.cluster.local:%d/metrics`,
 							metricsServiceName, namespace, metricsPort,
 						),
@@ -186,6 +187,6 @@ func getMetricsOutput(t *testing.T) string {
 
 	metricsOutput, err := k8sClient.GetPodLogs(ctx, "curl-metrics", namespace)
 	g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-	g.Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
+	g.Expect(metricsOutput).To(ContainSubstring("HTTP_STATUS:200"))
 	return metricsOutput
 }

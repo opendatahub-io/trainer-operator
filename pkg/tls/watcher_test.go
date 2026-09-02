@@ -263,8 +263,8 @@ func TestProfileWatcher_UpdatesLastProfile(t *testing.T) {
 }
 
 func TestProfileWatcher_AdherenceChangeTriggersRestart(t *testing.T) {
-	// Start with StrictAllComponents + Old profile
-	apiServer := makeAPIServerObjWithAdherence("Old", "NoOpinion")
+	// Watcher state says StrictAllComponents; the cluster now reports Legacy adherence.
+	apiServer := makeAPIServerObjWithAdherence("Old", string(AdherenceLegacyAdheringComponentsOnly))
 	initialResult := resultFromSpec(map[string]interface{}{
 		"type": "Old",
 	}, AdherenceStrictAllComponents)
@@ -280,7 +280,29 @@ func TestProfileWatcher_AdherenceChangeTriggersRestart(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if called.Load() != 1 {
-		t.Errorf("expected callback when adherence changes from Strict to NoOpinion, got %d", called.Load())
+		t.Errorf("expected callback when adherence changes from Strict to Legacy, got %d", called.Load())
+	}
+}
+
+func TestProfileWatcher_AdherenceStrictToUnsetTriggersRestart(t *testing.T) {
+	// Cluster had StrictAllComponents; now the field is absent (empty = NoOpinion).
+	apiServer := makeAPIServerObj("Old") // no adherence field
+	initialResult := resultFromSpec(map[string]interface{}{
+		"type": "Old",
+	}, AdherenceStrictAllComponents)
+
+	var called atomic.Int32
+	c := fake.NewClientBuilder().WithObjects(apiServer).Build()
+	watcher := NewProfileWatcher(c, initialResult, func() {
+		called.Add(1)
+	})
+
+	_, err := watcher.Reconcile(context.Background(), reconcile.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called.Load() != 1 {
+		t.Errorf("expected callback when adherence changes from Strict to unset, got %d", called.Load())
 	}
 }
 

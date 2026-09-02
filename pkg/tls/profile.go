@@ -113,7 +113,7 @@ func FetchTLSProfileWithClient(ctx context.Context, c client.Client) FetchResult
 			}
 		}
 		if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
-			profileLog.Error(err, "Permission denied reading TLS profile, using hardened defaults; watcher will retry")
+			profileLog.Error(err, "Permission denied reading TLS profile, using Intermediate fallback; watcher will retry")
 			return FetchResult{
 				TLSOpts:      intermediateOpts(),
 				Fetched:      false,
@@ -121,8 +121,13 @@ func FetchTLSProfileWithClient(ctx context.Context, c client.Client) FetchResult
 				RawSpec:      nil,
 			}
 		}
-		profileLog.Error(err, "Failed to read APIServer TLS profile, using hardened defaults")
-		return hardenedDefault()
+		profileLog.Error(err, "Failed to read APIServer TLS profile, using Intermediate fallback; watcher will retry")
+		return FetchResult{
+			TLSOpts:      intermediateOpts(),
+			Fetched:      false,
+			APIAvailable: true,
+			RawSpec:      nil,
+		}
 	}
 
 	adherence := readAdherence(apiServer)

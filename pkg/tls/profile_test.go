@@ -394,7 +394,7 @@ func TestFetchTLSProfileWithClient(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown non-transient error returns hardened default with APIAvailable=false", func(t *testing.T) {
+	t.Run("unknown non-transient error returns Intermediate fallback with APIAvailable=true", func(t *testing.T) {
 		c := fake.NewClientBuilder().
 			WithInterceptorFuncs(interceptor.Funcs{
 				Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
@@ -405,8 +405,18 @@ func TestFetchTLSProfileWithClient(t *testing.T) {
 		if result.Fetched {
 			t.Error("expected Fetched=false for non-transient error")
 		}
-		if result.APIAvailable {
-			t.Error("expected APIAvailable=false for unknown non-transient error")
+		if !result.APIAvailable {
+			t.Error("expected APIAvailable=true so watcher can retry")
+		}
+		cfg := &cryptotls.Config{}
+		for _, opt := range result.TLSOpts {
+			opt(cfg)
+		}
+		if cfg.MinVersion != cryptotls.VersionTLS12 {
+			t.Errorf("expected TLS 1.2, got %d", cfg.MinVersion)
+		}
+		if len(cfg.CipherSuites) != len(IntermediateCiphers) {
+			t.Errorf("expected %d Intermediate ciphers, got %d", len(IntermediateCiphers), len(cfg.CipherSuites))
 		}
 	})
 
