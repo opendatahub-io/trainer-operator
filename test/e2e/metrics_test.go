@@ -32,7 +32,7 @@ const (
 	metricsServiceName      = "trainer-operator-controller-manager-metrics-service"
 	metricsReaderRoleName   = "trainer-operator-metrics-reader"
 	metricsBindingName      = "trainer-operator-metrics-binding"
-	metricsServerSecretName = "trainer-operator-metrics-server-cert"
+	metricsServerSecretName = "metrics-server-cert"
 	metricsPort             = 8443
 )
 
