@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Kind/e2e: mount a pre-created metrics TLS secret without OpenShift RBAC or
+# service-ca annotations.
+resources:
+- ../../default
+
+patches:
+- path: metrics_cert_manager_patch.yaml
+  target:
+    kind: Deployment

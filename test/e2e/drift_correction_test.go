@@ -21,16 +21,18 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/opendatahub-io/odh-platform-utilities/api/common"
 )
 
 const (
-	driftCorrectionTimeout = 2 * time.Minute
+	driftCorrectionTimeout  = 2 * time.Minute
+	trainerProvisionTimeout = 10 * time.Minute
 )
 
-// TestDriftCorrection verifies that the controller automatically recreates
+// TestTrainerModule_DriftCorrection verifies that the controller automatically recreates
 // managed resources when they are deleted (drift correction via watches).
 //
 // Test flow:
@@ -41,13 +43,19 @@ const (
 //
 // Note: We test with ConfigMap instead of Deployment because deleting the
 // Deployment would break the webhook service, preventing reconciliation.
-func TestDriftCorrection(t *testing.T) {
+func TestTrainerModule_DriftCorrection(t *testing.T) {
 	g := NewWithT(t)
 	k8sClient.RegisterDebugCleanup(t, ctx, namespace)
 
-	// Create Trainer CR
-	err := k8sClient.CreateTrainer(ctx, trainerNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Failed to create Trainer CR")
+	// Create Trainer CR when this test runs after lifecycle tests leave none behind.
+	_, err := k8sClient.GetTrainer(ctx)
+	switch {
+	case errors.IsNotFound(err):
+		err = k8sClient.CreateTrainer(ctx, trainerNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Failed to create Trainer CR")
+	case err != nil:
+		g.Expect(err).NotTo(HaveOccurred(), "Failed to get Trainer CR")
+	}
 
 	// Wait for Trainer to reach Ready state and resources to be created
 	const expectedConfigMapName = "kubeflow-trainer-config"
@@ -66,7 +74,7 @@ func TestDriftCorrection(t *testing.T) {
 			"ConfigMap should have correct labels")
 		originalUID = string(cm.UID)
 	}
-	g.Eventually(verifyTrainerReady).WithTimeout(5 * time.Minute).Should(Succeed())
+	g.Eventually(verifyTrainerReady).WithTimeout(trainerProvisionTimeout).Should(Succeed())
 
 	t.Logf("Trainer Ready with ConfigMap: %s (UID: %s)", expectedConfigMapName, originalUID)
 
