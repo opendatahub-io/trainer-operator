@@ -51,6 +51,14 @@ endif
 OPERATOR_SDK_VERSION ?= v1.42.2
 # Image URL to use all building/pushing image targets
 IMG ?= quay.io/opendatahub/odh-trainer-operator:odh-stable
+DEPLOY_OVERLAY ?= default
+SUPPORTED_DEPLOY_OVERLAYS := default overlays/openshift overlays/odh overlays/rhoai overlays/dev-certs
+ifneq ($(words $(DEPLOY_OVERLAY)),1)
+$(error DEPLOY_OVERLAY must be a single value, got "$(DEPLOY_OVERLAY)")
+endif
+ifneq ($(filter $(DEPLOY_OVERLAY),$(SUPPORTED_DEPLOY_OVERLAYS)),$(DEPLOY_OVERLAY))
+$(error unsupported DEPLOY_OVERLAY "$(DEPLOY_OVERLAY)"; valid values: $(SUPPORTED_DEPLOY_OVERLAYS))
+endif
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -109,7 +117,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
+test: manifests generate fmt vet setup-envtest kustomize ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v '/cmd$$' | grep -v '/test/') -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
@@ -236,13 +244,14 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	$(KUBECTL) create namespace trainer-operator-system --dry-run=client -o yaml | $(KUBECTL) apply -f -
 	@tmp="$$(mktemp -d)"; [ -n "$$tmp" ] || { echo "mktemp failed"; exit 1; }; trap 'rm -rf "$$tmp"' EXIT; \
 		cp -r config "$$tmp/config"; \
-		cd "$$tmp" && sed -i 's|TRAINER_OPERATOR_IMAGE=.*|TRAINER_OPERATOR_IMAGE=$(IMG)|' config/default/params.env && \
+		cd "$$tmp" && sed 's|TRAINER_OPERATOR_IMAGE=.*|TRAINER_OPERATOR_IMAGE=$(IMG)|' config/default/params.env > config/default/params.env.tmp && \
+		mv config/default/params.env.tmp config/default/params.env && \
 		grep -qF 'TRAINER_OPERATOR_IMAGE=$(IMG)' config/default/params.env || { echo "ERROR: failed to set TRAINER_OPERATOR_IMAGE"; exit 1; } && \
-		$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+		$(KUSTOMIZE) build "config/$(DEPLOY_OVERLAY)" | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build "config/$(DEPLOY_OVERLAY)" | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 

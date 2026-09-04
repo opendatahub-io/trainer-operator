@@ -190,6 +190,50 @@ spec:
 	return err
 }
 
+const openshiftTLSProfileRBAC = `apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: trainer-e2e-openshift-tls-profile-reader
+rules:
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - apiservers
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: trainer-e2e-openshift-tls-profile-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: trainer-e2e-openshift-tls-profile-reader
+subjects:
+- kind: ServiceAccount
+  name: kubeflow-trainer-controller-manager
+  namespace: opendatahub
+`
+
+// InstallOpenShiftTLSProfileRBAC lets the Trainer operand probe the optional
+// OpenShift TLS profile API and fall back cleanly when the API is absent.
+func InstallOpenShiftTLSProfileRBAC() error {
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(openshiftTLSProfileRBAC)
+	_, err := Run(cmd)
+	return err
+}
+
+// UninstallOpenShiftTLSProfileRBAC removes the Kind-only TLS profile access.
+func UninstallOpenShiftTLSProfileRBAC() {
+	cmd := exec.Command("kubectl", "delete", "-f", "-", "--ignore-not-found=true")
+	cmd.Stdin = strings.NewReader(openshiftTLSProfileRBAC)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := "kind"
@@ -198,8 +242,43 @@ func LoadImageToKindClusterWithName(name string) error {
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
-	return err
+	if _, err := Run(cmd); err == nil {
+		return nil
+	}
+
+	// kind's podman provider cannot always see images built with podman; fall back to archive load.
+	return loadImageArchiveToKind(name, cluster)
+}
+
+// ContainerTool returns the container CLI used by Makefile targets (podman by default).
+func ContainerTool() string {
+	if tool := os.Getenv("CONTAINER_TOOL"); tool != "" {
+		return tool
+	}
+	return "podman"
+}
+
+func loadImageArchiveToKind(name, cluster string) error {
+	containerTool := ContainerTool()
+
+	tmp, err := os.CreateTemp("", "kind-image-*.tar")
+	if err != nil {
+		return fmt.Errorf("creating image archive temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	save := exec.Command(containerTool, "save", name, "-o", tmpPath)
+	if _, err := Run(save); err != nil {
+		return fmt.Errorf("saving %s for kind load: %w", name, err)
+	}
+
+	load := exec.Command("kind", "load", "image-archive", tmpPath, "--name", cluster)
+	if _, err := Run(load); err != nil {
+		return fmt.Errorf("loading %s into kind: %w", name, err)
+	}
+	return nil
 }
 
 // GetNonEmptyLines converts given command output string into individual objects

@@ -32,9 +32,11 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/opendatahub-io/trainer-operator/test/support"
 	"github.com/opendatahub-io/trainer-operator/test/utils"
@@ -51,12 +53,20 @@ var (
 )
 
 const (
-	namespace             = "trainer-operator-system"
-	metricsServiceName    = "trainer-operator-controller-manager-metrics-service"
-	metricsReaderRoleName = "trainer-operator-metrics-reader"
-	metricsBindingName    = "trainer-operator-metrics-binding"
-	metricsTLSSecretName  = "trainer-operator-metrics-tls"
-	metricsPort           = 8443
+	namespace          = "trainer-operator-system"
+	operatorDeployment = "trainer-operator-controller-manager"
+	// Digest-pinned image matching quay.io/opendatahub/trainer:odh-stable as of 2026-09-04.
+	trainerOperandImage = "quay.io/opendatahub/trainer@sha256:" +
+		"c0159937f5c6c5b589e6482cbbad8ee857155b562b888ad126ed6cce10dde77f"
+	// Podman archives loaded from a digest reference get a synthetic import name
+	// in Kind. Pull the digest, then load and run the platform-specific tag.
+	trainerOperandImageTag = "quay.io/opendatahub/trainer:odh-stable"
+	trainerOperandImageEnv = "RELATED_IMAGE_ODH_TRAINER_IMAGE"
+	metricsServiceName     = "trainer-operator-controller-manager-metrics-service"
+	metricsReaderRoleName  = "trainer-operator-metrics-reader"
+	metricsBindingName     = "trainer-operator-metrics-binding"
+	metricsTLSSecretName   = "trainer-operator-metrics-tls"
+	metricsPort            = 8443
 )
 
 func TestMain(m *testing.M) {
@@ -72,6 +82,10 @@ func TestMain(m *testing.M) {
 
 	if err := utils.LoadImageToKindClusterWithName(projectImage); err != nil {
 		log.Fatalf("Failed to load the manager(Operator) image into Kind: %v", err)
+	}
+
+	if err := preloadOperandImage(); err != nil {
+		log.Fatalf("Failed to preload trainer operand image into Kind: %v", err)
 	}
 
 	if !skipCertManagerInstall {
@@ -124,9 +138,17 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to install ImageStream CRD: %v", err)
 	}
 
-	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+	if err := utils.InstallOpenShiftTLSProfileRBAC(); err != nil {
+		log.Fatalf("Failed to install OpenShift TLS profile RBAC: %v", err)
+	}
+
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage), "DEPLOY_OVERLAY=overlays/dev-certs")
 	if _, err := utils.Run(cmd); err != nil {
 		log.Fatalf("Failed to deploy the controller-manager: %v", err)
+	}
+
+	if err := configureTrainerOperandImage(ctx); err != nil {
+		log.Fatalf("Failed to configure trainer operand image: %v", err)
 	}
 
 	if err := installJobSetCRD(); err != nil {
@@ -142,8 +164,9 @@ func TestMain(m *testing.M) {
 	_ = k8sClient.CoreV1().Pods(namespace).Delete(ctx, "curl-metrics", metav1.DeleteOptions{})
 	_ = k8sClient.RbacV1().ClusterRoleBindings().Delete(
 		ctx, "trainer-operator-metrics-binding", metav1.DeleteOptions{})
+	utils.UninstallOpenShiftTLSProfileRBAC()
 
-	cmd = exec.Command("make", "undeploy")
+	cmd = exec.Command("make", "undeploy", "DEPLOY_OVERLAY=overlays/dev-certs")
 	_, _ = utils.Run(cmd)
 
 	cmd = exec.Command("make", "uninstall")
@@ -252,4 +275,66 @@ func metricsServiceDNSNames() []string {
 		metricsServiceName + "." + namespace + ".svc",
 		metricsServiceName + "." + namespace + ".svc.cluster.local",
 	}
+}
+
+func preloadOperandImage() error {
+	pull := exec.Command(utils.ContainerTool(), "pull", "--platform=linux/amd64", trainerOperandImage)
+	if _, err := utils.Run(pull); err != nil {
+		return fmt.Errorf("pulling %s: %w", trainerOperandImage, err)
+	}
+	tag := exec.Command(utils.ContainerTool(), "tag", trainerOperandImage, trainerOperandImageTag)
+	if _, err := utils.Run(tag); err != nil {
+		return fmt.Errorf("tagging %s as %s: %w", trainerOperandImage, trainerOperandImageTag, err)
+	}
+	if err := utils.LoadImageToKindClusterWithName(trainerOperandImageTag); err != nil {
+		return fmt.Errorf("loading %s into kind: %w", trainerOperandImageTag, err)
+	}
+	return nil
+}
+
+func configureTrainerOperandImage(ctx context.Context) error {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deploy, err := k8sClient.AppsV1().Deployments(namespace).Get(ctx, operatorDeployment, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		if err := setContainerEnv(deploy, trainerOperandImageEnv, trainerOperandImageTag); err != nil {
+			return err
+		}
+
+		_, err = k8sClient.AppsV1().Deployments(namespace).Update(ctx, deploy, metav1.UpdateOptions{})
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("updating operator deployment: %w", err)
+	}
+
+	rollout := exec.Command("kubectl", "rollout", "status",
+		"deployment/"+operatorDeployment, "-n", namespace, "--timeout=120s")
+	if _, err := utils.Run(rollout); err != nil {
+		return fmt.Errorf("waiting for operator rollout: %w", err)
+	}
+
+	return nil
+}
+
+func setContainerEnv(deploy *appsv1.Deployment, name, value string) error {
+	if len(deploy.Spec.Template.Spec.Containers) == 0 {
+		return fmt.Errorf("operator deployment has no containers")
+	}
+
+	container := &deploy.Spec.Template.Spec.Containers[0]
+	for i := range container.Env {
+		if container.Env[i].Name == name {
+			container.Env[i].Value = value
+			return nil
+		}
+	}
+
+	container.Env = append(container.Env, corev1.EnvVar{
+		Name:  name,
+		Value: value,
+	})
+	return nil
 }

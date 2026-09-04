@@ -25,3 +25,8 @@ jobs:
         run: |
           go mod tidy
           make test
+
+      - name: Test deployment overlays
+        run: |
+          make kustomize
+          go test ./config/overlays/...
