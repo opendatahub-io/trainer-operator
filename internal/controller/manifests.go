@@ -29,6 +29,7 @@ import (
 )
 
 const defaultOverlay = "rhoai"
+const openshiftOperandRBACOverlay = "rhoai/rbac/openshift"
 
 func renderOverlay(path, namespace string) ([]unstructured.Unstructured, error) {
 	opts := []kustomize.RenderOptsFn{
