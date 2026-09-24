@@ -45,6 +45,7 @@ var runtimesParamMap = map[string]string{
 	"odh-th-torch-cuda-py312-image":       "RELATED_IMAGE_ODH_TH_TORCH_CUDA_PY312_IMAGE",
 	"odh-th-torch-rocm-py312-image":       "RELATED_IMAGE_ODH_TH_TORCH_ROCM_PY312_IMAGE",
 	"odh-th-torch-cpu-py312-image":        "RELATED_IMAGE_ODH_TH_TORCH_CPU_PY312_IMAGE",
+	"odh-openmpi-cuda-image":              "RELATED_IMAGE_ODH_TRAINING_CUDA130_TORCH210_PY312_OPENMPI41_IMAGE",
 	"odh-speculator-model-opt-cuda-image": "RELATED_IMAGE_RHAII_MODEL_OPT_CUDA_IMAGE",
 	"odh-vllm-cuda-image":                 "RELATED_IMAGE_RHAII_VLLM_CUDA_IMAGE",
 }
