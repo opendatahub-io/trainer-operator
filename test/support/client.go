@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -51,6 +52,7 @@ const (
 
 type Client struct {
 	kubernetes.Interface
+	Config              *rest.Config
 	CRClient            client.Client
 	DynamicClient       dynamic.Interface
 	ApiextensionsClient apiextensionsclientset.Interface
@@ -91,6 +93,7 @@ func NewClient() (*Client, error) {
 
 	return &Client{
 		Interface:           clientset,
+		Config:              cfg,
 		CRClient:            crClient,
 		DynamicClient:       dynamicClient,
 		ApiextensionsClient: apiextensionsClient,
