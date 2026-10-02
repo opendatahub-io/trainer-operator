@@ -27,7 +27,7 @@ import (
 	"github.com/opendatahub-io/trainer-operator/test/support"
 )
 
-func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
+func TestServiceMonitorScrapedByPrometheus(t *testing.T) {
 	g := NewWithT(t)
 	const (
 		prometheusNamespace = "openshift-monitoring"
@@ -47,8 +47,10 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 	t.Cleanup(stop)
 
 	g.Eventually(func(g Gomega) {
-		found, queryErr := support.PrometheusHasServiceMonitorTarget(ctx, address, namespace, monitorName, serviceName)
+		scraped, status, queryErr := support.PrometheusServiceMonitorScrapeStatus(
+			ctx, address, namespace, monitorName, serviceName)
 		g.Expect(queryErr).NotTo(HaveOccurred())
-		g.Expect(found).To(BeTrue(), "OpenShift Prometheus has not discovered the operator ServiceMonitor target")
+		g.Expect(scraped).To(BeTrue(),
+			"OpenShift Prometheus has not successfully scraped the operator ServiceMonitor target: %s", status)
 	}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 }

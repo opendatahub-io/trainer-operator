@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -41,7 +42,7 @@ var prometheusResource = schema.GroupVersionResource{
 	Group: "monitoring.coreos.com", Version: "v1", Resource: "prometheuses",
 }
 
-func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
+func TestServiceMonitorScrapedByPrometheus(t *testing.T) {
 	g := NewWithT(t)
 
 	_, err := k8sClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
@@ -56,6 +57,20 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: prometheusServiceAcct},
 	}, metav1.CreateOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
+	const scrapeBindingName = "trainer-operator-prometheus-e2e-metrics-reader"
+	_, err = k8sClient.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: scrapeBindingName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: metricsReaderRoleName,
+		},
+		Subjects: []rbacv1.Subject{{
+			Kind: rbacv1.ServiceAccountKind, Name: prometheusServiceAcct, Namespace: prometheusNamespace,
+		}},
+	}, metav1.CreateOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	t.Cleanup(func() {
+		_ = k8sClient.RbacV1().ClusterRoleBindings().Delete(ctx, scrapeBindingName, metav1.DeleteOptions{})
+	})
 
 	prometheus := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "monitoring.coreos.com/v1",
@@ -91,10 +106,11 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 	t.Cleanup(stop)
 
 	g.Eventually(func(g Gomega) {
-		found, queryErr := support.PrometheusHasServiceMonitorTarget(
+		scraped, status, queryErr := support.PrometheusServiceMonitorScrapeStatus(
 			ctx, address, namespace, metricsMonitorName, metricsServiceName)
 		g.Expect(queryErr).NotTo(HaveOccurred())
-		g.Expect(found).To(BeTrue(),
-			fmt.Sprintf("Prometheus has not discovered ServiceMonitor %s/%s", namespace, metricsMonitorName))
+		g.Expect(scraped).To(BeTrue(),
+			fmt.Sprintf("Prometheus has not successfully scraped ServiceMonitor %s/%s: %s",
+				namespace, metricsMonitorName, status))
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 }

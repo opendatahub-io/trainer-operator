@@ -72,22 +72,23 @@ func (c *Client) PortForwardPrometheus(ctx context.Context, namespace, podName s
 	}, nil
 }
 
-// PrometheusHasServiceMonitorTarget checks discovery only, not scrape health.
-func PrometheusHasServiceMonitorTarget(
+// PrometheusServiceMonitorScrapeStatus reports whether Prometheus has successfully
+// scraped the ServiceMonitor target and returns its current state for diagnostics.
+func PrometheusServiceMonitorScrapeStatus(
 	ctx context.Context, address, namespace, monitorName, serviceName string,
-) (bool, error) {
+) (bool, string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address+"/api/v1/targets?state=active", nil)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("prometheus targets API returned %s", response.Status)
+		return false, "", fmt.Errorf("prometheus targets API returned %s", response.Status)
 	}
 	var targets struct {
 		Status string `json:"status"`
@@ -95,20 +96,22 @@ func PrometheusHasServiceMonitorTarget(
 			Active []struct {
 				ScrapePool string            `json:"scrapePool"`
 				Labels     map[string]string `json:"labels"`
+				Health     string            `json:"health"`
+				LastError  string            `json:"lastError"`
 			} `json:"activeTargets"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&targets); err != nil {
-		return false, err
+		return false, "", err
 	}
 	if targets.Status != "success" {
-		return false, fmt.Errorf("prometheus targets API returned status %q", targets.Status)
+		return false, "", fmt.Errorf("prometheus targets API returned status %q", targets.Status)
 	}
 	pool := fmt.Sprintf("serviceMonitor/%s/%s/0", namespace, monitorName)
 	for _, target := range targets.Data.Active {
 		if target.ScrapePool == pool && target.Labels["namespace"] == namespace && target.Labels["service"] == serviceName {
-			return true, nil
+			return target.Health == "up", fmt.Sprintf("health=%q, lastError=%q", target.Health, target.LastError), nil
 		}
 	}
-	return false, nil
+	return false, "target not discovered", nil
 }
