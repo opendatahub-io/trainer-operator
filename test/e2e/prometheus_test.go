@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,9 +31,10 @@ import (
 )
 
 const (
-	prometheusNamespace = "prometheus-e2e"
-	prometheusName      = "e2e"
-	metricsMonitorName  = "trainer-operator-controller-manager-metrics-monitor"
+	prometheusNamespace   = "openshift-monitoring"
+	prometheusName        = "e2e"
+	prometheusServiceAcct = "prometheus-k8s"
+	metricsMonitorName    = "trainer-operator-controller-manager-metrics-monitor"
 )
 
 var prometheusResource = schema.GroupVersionResource{
@@ -53,24 +53,9 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 	})
 
 	_, err = k8sClient.CoreV1().ServiceAccounts(prometheusNamespace).Create(ctx, &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: prometheusName},
+		ObjectMeta: metav1.ObjectMeta{Name: prometheusServiceAcct},
 	}, metav1.CreateOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
-
-	_, err = k8sClient.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "trainer-operator-prometheus-e2e-view"},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "view",
-		},
-		Subjects: []rbacv1.Subject{{
-			Kind: "ServiceAccount", Name: prometheusName, Namespace: prometheusNamespace,
-		}},
-	}, metav1.CreateOptions{})
-	g.Expect(err).NotTo(HaveOccurred())
-	t.Cleanup(func() {
-		_ = k8sClient.RbacV1().ClusterRoleBindings().Delete(
-			ctx, "trainer-operator-prometheus-e2e-view", metav1.DeleteOptions{})
-	})
 
 	prometheus := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "monitoring.coreos.com/v1",
@@ -79,7 +64,7 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 			"name": prometheusName,
 		},
 		"spec": map[string]any{
-			"serviceAccountName": prometheusName,
+			"serviceAccountName": prometheusServiceAcct,
 			"serviceMonitorSelector": map[string]any{
 				"matchLabels": map[string]any{"app.kubernetes.io/name": "trainer-operator"},
 			},

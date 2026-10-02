@@ -50,5 +50,5 @@ func TestServiceMonitorDiscoveredByPrometheus(t *testing.T) {
 		found, queryErr := support.PrometheusHasServiceMonitorTarget(ctx, address, namespace, monitorName, serviceName)
 		g.Expect(queryErr).NotTo(HaveOccurred())
 		g.Expect(found).To(BeTrue(), "OpenShift Prometheus has not discovered the operator ServiceMonitor target")
-	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+	}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 }
