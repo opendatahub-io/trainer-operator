@@ -92,6 +92,9 @@ OCP e2e tests (requires a cluster with the operator and JobSet controller deploy
 make test-e2e-ocp
 ```
 
+Pull requests also run the OCP e2e flow in Prow before the TLS/PQC scanner checks
+the deployed Trainer Operator and Kubeflow Trainer workloads.
+
 ### Deploy to Cluster
 
 ```bash
